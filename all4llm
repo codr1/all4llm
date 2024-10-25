@@ -1,0 +1,189 @@
+#!/bin/bash
+
+# Default source code file extensions
+default_extensions=(
+    "*.c" "*.h" "*.cpp" "*.hpp" "*.cc"    # C/C++
+    "*.py" "*.pyw"                        # Python
+    "*.js" "*.ts" "*.jsx" "*.tsx"         # JavaScript/TypeScript
+    "*.go"                                # Go
+    "*.java"                              # Java
+    "*.rs"                                # Rust
+    "*.rb"                                # Ruby
+    "*.php"                               # PHP
+    "*.cs"                                # C#
+    "*.swift"                             # Swift
+    "*.kt" "*.kts"                        # Kotlin
+    "*.scala"                             # Scala
+    "*.sh" "*.bash" "*.z                  # Shell scripts
+    "*.md" "*.rst"                        # Documentation
+    "*.sql"                               # SQL
+    "*.xml" "*.json" "*.yaml" "*.yml"     # Data/Config files
+)
+
+# Display help message
+show_help() {
+    cat << EOF
+Usage: assemble [OPTIONS] DIRECTORY
+
+Assembles source code files from a directory into a single output, with clear file demarcation.
+Useful for preparing code for Large Language Model analysis.
+
+Options:
+    -h, --help      Show this help message
+    -r, --recursive Include subdirectories recursively
+    -i, --include PATTERN
+                    Include additional file pattern (can be used multiple times)
+    -o, --output FILE
+                    Write output to FILE instead of stdout
+    --no-hidden     Skip hidden files and directories
+    --list-defaults List default file extensions that are included
+    --only PATTERN  Only include specified pattern (disables default extensions)
+
+By default, includes common source code files (${#default_extensions[@]} extensions including
+.c, .cpp, .py, .js, .ts, .go, etc). Use --list-defaults to see full list.
+
+Examples:
+    assemble src/
+    assemble -r project/
+    assemble -r . -o project_code.txt --no-hidden
+    assemble . --only "*.py"
+    assemble . -i "*.conf" -i "*.cfg"
+
+File Format:
+    Each file in the output is clearly marked with:
+    <<<< FILE: path/to/file.ext >>>>
+    [file contents]
+    <<<< END FILE: path/to/file.ext >>>>
+
+EOF
+    exit 0
+}
+
+# Function to list default extensions
+list_defaults() {
+    echo "Default included file extensions:"
+    printf '%s\n' "${default_extensions[@]}" | sort
+    exit 0
+}
+
+# Initialize variables
+recursive=false
+output_file=""
+no_hidden=false
+declare -a include_patterns
+only_pattern=""
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -h|--help)
+            show_help
+            ;;
+        -r|--recursive)
+            recursive=true
+            shift
+            ;;
+        -i|--include)
+            include_patterns+=("$2")
+            shift 2
+            ;;
+        -o|--output)
+            output_file="$2"
+            shift 2
+            ;;
+        --no-hidden)
+            no_hidden=true
+            shift
+            ;;
+        --list-defaults)
+            list_defaults
+            ;;
+        --only)
+            only_pattern="$2"
+            shift 2
+            ;;
+        *)
+            directory="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check if directory is provided
+if [ -z "$directory" ]; then
+    echo "Error: No directory specified"
+    show_help
+fi
+
+# Check if directory exists
+if [ ! -d "$directory" ]; then
+    echo "Error: Directory '$directory' does not exist"
+    exit 1
+fi
+
+# Function to check if file should be included
+should_include() {
+    local file="$1"
+    
+    # Skip hidden files if --no-hidden is set
+    if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
+        return 1
+    }
+    
+    # If --only is specified, only check that pattern
+    if [ -n "$only_pattern" ]; then
+        if [[ "$file" == $only_pattern ]]; then
+            return 0
+        fi
+        return 1
+    fi
+    
+    # Check against default extensions
+    for ext in "${default_extensions[@]}"; do
+        if [[ "$file" == $ext ]]; then
+            return 0
+        fi
+    done
+    
+    # Check against additional include patterns
+    for pattern in "${include_patterns[@]}"; do
+        if [[ "$file" == $pattern ]]; then
+            return 0
+        fi
+    done
+    
+    return 1
+}
+
+# Function to process files
+process_files() {
+    local dir="$1"
+    local output=""
+    
+    # Build find command based on recursive flag
+    local find_cmd="find \"$dir\" -type f"
+    if [ "$recursive" = false ]; then
+        find_cmd="find \"$dir\" -maxdepth 1 -type f"
+    fi
+    
+    # Execute find and process each file
+    while IFS= read -r file; do
+        # Skip if file shouldn't be included
+        if ! should_include "$file"; then
+            continue
+        fi
+        
+        # Output file marker and contents
+        echo "<<<< FILE: $file >>>>"
+        cat "$file"
+        echo "<<<< END FILE: $file >>>>"
+        echo ""
+    done < <(eval "$find_cmd" | sort)
+}
+
+# Process files and handle output
+if [ -n "$output_file" ]; then
+    process_files "$directory" > "$output_file"
+else
+    process_files "$directory"
+fi
