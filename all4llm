@@ -20,6 +20,41 @@ default_extensions=(
     "*.xml" "*.json" "*.yaml" "*.yml"     # Data/Config files
 )
 
+# Function to check clipboard tool availability
+check_clipboard_tool() {
+    if command -v xclip >/dev/null 2>&1; then
+        echo "xclip"
+    elif command -v pbcopy >/dev/null 2>&1; then
+        echo "pbcopy"
+    else
+        echo ""
+    fi
+}
+
+# Function to copy to clipboard
+copy_to_clipboard() {
+    local clipboard_tool=$(check_clipboard_tool)
+    
+    if [ -z "$clipboard_tool" ]; then
+        echo "Error: No clipboard tool found. Please install xclip (Linux) or use macOS."
+        echo "On Ubuntu/Debian: sudo apt-get install xclip"
+        return 1
+    fi
+    
+    if [ "$clipboard_tool" = "xclip" ]; then
+        xclip -selection clipboard
+    else
+        pbcopy
+    fi
+}
+
+# Function to estimate tokens
+# Using a simple approximation: ~4 characters per token
+estimate_tokens() {
+    local char_count=$1
+    echo $(( (char_count + 3) / 4 ))
+}
+
 # Display help message
 show_help() {
     cat << 'EOF'
@@ -35,6 +70,7 @@ Options:
                     Include additional file pattern (can be used multiple times)
     -o, --output FILE
                     Write output to FILE instead of stdout
+    -c, --clipboard Copy output to clipboard (requires xclip on Linux)
     --no-hidden     Skip hidden files and directories
     --list-defaults List default file extensions that are included
     --only PATTERN  Only include specified pattern (disables default extensions)
@@ -47,6 +83,7 @@ Examples:
     all4llm -r . -o project_code.txt --no-hidden
     all4llm . --only "*.py"
     all4llm . -i "*.conf" -i "*.cfg"
+    all4llm . -c     # Copy output to clipboard
 EOF
     exit 0
 }
@@ -65,6 +102,7 @@ no_hidden=false
 declare -a include_patterns
 only_pattern=""
 directory=""
+copy_clipboard=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -83,6 +121,10 @@ while [[ $# -gt 0 ]]; do
         -o|--output)
             output_file="$2"
             shift 2
+            ;;
+        -c|--clipboard)
+            copy_clipboard=true
+            shift
             ;;
         --no-hidden)
             no_hidden=true
@@ -151,6 +193,7 @@ should_include() {
 # Function to process files
 process_files() {
     local dir="$1"
+    local temp_file=$(mktemp)
     
     # Build find command based on recursive flag
     if [ "$recursive" = true ]; then
@@ -167,15 +210,30 @@ process_files() {
         fi
         
         # Output file marker and contents
-        printf '<<<< FILE: %s >>>>\n' "$file"
-        cat "$file" 2>/dev/null || echo "Error: Unable to read file $file"
-        printf '<<<< END FILE: %s >>>>\n\n' "$file"
+        printf '<<<< FILE: %s >>>>\n' "$file" >> "$temp_file"
+        cat "$file" 2>/dev/null >> "$temp_file" || echo "Error: Unable to read file $file" >> "$temp_file"
+        printf '<<<< END FILE: %s >>>>\n\n' "$file" >> "$temp_file"
     done < <(eval "$find_cmd" | sort)
+
+    # Get character count for token estimation
+    local char_count=$(wc -c < "$temp_file")
+    local token_estimate=$(estimate_tokens "$char_count")
+
+    # Output based on destination
+    if [ "$copy_clipboard" = true ]; then
+        cat "$temp_file" | copy_to_clipboard
+        echo "~$token_estimate tokens"
+    elif [ -n "$output_file" ]; then
+        cat "$temp_file" > "$output_file"
+        echo "~$token_estimate tokens"
+    else
+        cat "$temp_file"
+        echo "~$token_estimate tokens"
+    fi
+
+    # Clean up
+    rm "$temp_file"
 }
 
 # Process files and handle output
-if [ -n "$output_file" ]; then
-    process_files "$directory" > "$output_file"
-else
-    process_files "$directory"
-fi
+process_files "$directory"

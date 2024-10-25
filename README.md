@@ -1,6 +1,10 @@
 # all4llm
 
-A command-line tool that assembles source code files into a single output with clear file demarcation, making it easy to feed your codebase into Large Language Models (LLMs) for analysis, refactoring, or documentation.
+A command-line tool that assembles source code files into a format suitable for Large Language Models (LLMs). It automatically:
+- Combines multiple source files with clear demarcation
+- Estimates token count for LLM context planning
+- Supports direct clipboard copying for easy pasting into LLM chats
+- Handles common source code files by default
 
 ## Installation
 
@@ -14,6 +18,12 @@ chmod +x all4llm
 
 # Optional: Add to your PATH
 sudo ln -s $(pwd)/all4llm /usr/local/bin/all4llm
+
+# For clipboard support on Linux:
+sudo apt-get install xclip  # Ubuntu/Debian
+sudo dnf install xclip      # Fedora
+sudo pacman -S xclip        # Arch
+# Note: macOS clipboard support works out of the box
 ```
 
 ## Usage
@@ -26,8 +36,11 @@ Basic syntax:
 ### Common Use Cases
 
 ```bash
-# Assemble all source files in current directory
+# View source files in current directory
 ./all4llm .
+
+# Copy all source files to clipboard (for pasting into ChatGPT, etc.)
+./all4llm . -c
 
 # Process subdirectories recursively
 ./all4llm -r src/
@@ -47,7 +60,8 @@ Basic syntax:
 - `-h, --help`: Show help message
 - `-r, --recursive`: Include subdirectories recursively
 - `-i, --include PATTERN`: Include additional file pattern
-- `-o, --output FILE`: Write output to file instead of stdout
+- `-o, --output FILE`: Write output to file
+- `-c, --clipboard`: Copy output to clipboard
 - `--no-hidden`: Skip hidden files and directories
 - `--list-defaults`: Show default file extensions
 - `--only PATTERN`: Only include specified pattern (disables defaults)
@@ -76,4 +90,10 @@ Files are marked in the output like this:
 <<<< END FILE: path/to/file.ext >>>>
 ```
 
-This format makes it easy for LLMs to understand file boundaries and locations when processing your code.
+The last line of output always shows an estimate of how many tokens the content will consume in your LLM context window.
+
+### Tips
+- Use `-c` for direct clipboard copy so you can easily interract with an LLM
+- Token count helps you stay within LLM context limits
+- Use `--only "*.ext"` to focus on specific file types
+- Use `-r` when you need to include subdirectories
