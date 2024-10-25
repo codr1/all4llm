@@ -1,10 +1,12 @@
 # all4llm
 
-A command-line tool that assembles source code files into a format suitable for Large Language Models (LLMs). It automatically:
-- Combines multiple source files with clear demarcation
-- Estimates token count for LLM context planning
+A command-line tool that assembles multiple source code files (by recursively scanning directories among other ways) into a single string, in a format suitable to send to  Large Language Models (LLMs). It automatically:
+- Combines multiple source files into a single string with clear demarcation between the sections representing each file.
 - Supports direct clipboard copying for easy pasting into LLM chats
+- Recursively scans directories to gather the files
 - Handles common source code files by default
+- Basic filtering for including / excluding files by extension
+- Estimates token count for LLM context planning
 
 ## Installation
 
