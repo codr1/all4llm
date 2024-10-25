@@ -3,18 +3,18 @@
 # Default source code file extensions
 default_extensions=(
     "*.c" "*.h" "*.cpp" "*.hpp" "*.cc"    # C/C++
-    "*.py" "*.pyw"                        # Python
+    "*.py" "*.pyw"                         # Python
     "*.js" "*.ts" "*.jsx" "*.tsx"         # JavaScript/TypeScript
-    "*.go"                                # Go
-    "*.java"                              # Java
-    "*.rs"                                # Rust
-    "*.rb"                                # Ruby
-    "*.php"                               # PHP
-    "*.cs"                                # C#
-    "*.swift"                             # Swift
+    "*.go"                                 # Go
+    "*.java"                               # Java
+    "*.rs"                                 # Rust
+    "*.rb"                                 # Ruby
+    "*.php"                                # PHP
+    "*.cs"                                 # C#
+    "*.swift"                              # Swift
     "*.kt" "*.kts"                        # Kotlin
-    "*.scala"                             # Scala
-    "*.sh" "*.bash" "*.z                  # Shell scripts
+    "*.scala"                              # Scala
+    "*.sh" "*.bash"                       # Shell scripts
     "*.md" "*.rst"                        # Documentation
     "*.sql"                               # SQL
     "*.xml" "*.json" "*.yaml" "*.yml"     # Data/Config files
@@ -22,8 +22,8 @@ default_extensions=(
 
 # Display help message
 show_help() {
-    cat << EOF
-Usage: assemble [OPTIONS] DIRECTORY
+    cat << 'EOF'
+Usage: all4llm [OPTIONS] DIRECTORY
 
 Assembles source code files from a directory into a single output, with clear file demarcation.
 Useful for preparing code for Large Language Model analysis.
@@ -39,22 +39,14 @@ Options:
     --list-defaults List default file extensions that are included
     --only PATTERN  Only include specified pattern (disables default extensions)
 
-By default, includes common source code files (${#default_extensions[@]} extensions including
-.c, .cpp, .py, .js, .ts, .go, etc). Use --list-defaults to see full list.
+By default, includes common source code files. Use --list-defaults to see full list.
 
 Examples:
-    assemble src/
-    assemble -r project/
-    assemble -r . -o project_code.txt --no-hidden
-    assemble . --only "*.py"
-    assemble . -i "*.conf" -i "*.cfg"
-
-File Format:
-    Each file in the output is clearly marked with:
-    <<<< FILE: path/to/file.ext >>>>
-    [file contents]
-    <<<< END FILE: path/to/file.ext >>>>
-
+    all4llm src/
+    all4llm -r project/
+    all4llm -r . -o project_code.txt --no-hidden
+    all4llm . --only "*.py"
+    all4llm . -i "*.conf" -i "*.cfg"
 EOF
     exit 0
 }
@@ -72,6 +64,7 @@ output_file=""
 no_hidden=false
 declare -a include_patterns
 only_pattern=""
+directory=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -128,7 +121,7 @@ should_include() {
     # Skip hidden files if --no-hidden is set
     if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
         return 1
-    }
+    fi
     
     # If --only is specified, only check that pattern
     if [ -n "$only_pattern" ]; then
@@ -158,15 +151,15 @@ should_include() {
 # Function to process files
 process_files() {
     local dir="$1"
-    local output=""
     
     # Build find command based on recursive flag
-    local find_cmd="find \"$dir\" -type f"
-    if [ "$recursive" = false ]; then
+    if [ "$recursive" = true ]; then
+        find_cmd="find \"$dir\" -type f"
+    else
         find_cmd="find \"$dir\" -maxdepth 1 -type f"
     fi
-    
-    # Execute find and process each file
+
+    # Process each file
     while IFS= read -r file; do
         # Skip if file shouldn't be included
         if ! should_include "$file"; then
@@ -174,10 +167,9 @@ process_files() {
         fi
         
         # Output file marker and contents
-        echo "<<<< FILE: $file >>>>"
-        cat "$file"
-        echo "<<<< END FILE: $file >>>>"
-        echo ""
+        printf '<<<< FILE: %s >>>>\n' "$file"
+        cat "$file" 2>/dev/null || echo "Error: Unable to read file $file"
+        printf '<<<< END FILE: %s >>>>\n\n' "$file"
     done < <(eval "$find_cmd" | sort)
 }
 
