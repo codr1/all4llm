@@ -20,6 +20,16 @@ default_extensions=(
     "*.xml" "*.json" "*.yaml" "*.yml"     # Data/Config files
 )
 
+# Default excluded directories
+default_excluded_dirs=(
+    "node_modules"
+    "venv"
+    "__pycache__"
+    ".git"
+    "build"
+    "dist"
+)
+
 # Function to check clipboard tool availability
 check_clipboard_tool() {
     if command -v xclip >/dev/null 2>&1; then
@@ -74,8 +84,12 @@ Options:
     --no-hidden     Skip hidden files and directories
     --list-defaults List default file extensions that are included
     --only PATTERN  Only include specified pattern (disables default extensions)
+    -x, --exclude DIR
+                    Exclude directory (can be used multiple times)
+    --list-excluded List default excluded directories
 
-By default, includes common source code files. Use --list-defaults to see full list.
+By default, includes common source code files and excludes common build/dependency directories.
+Use --list-defaults to see included extensions and --list-excluded to see excluded directories.
 
 Examples:
     all4llm src/
@@ -84,6 +98,7 @@ Examples:
     all4llm . --only "*.py"
     all4llm . -i "*.conf" -i "*.cfg"
     all4llm . -c     # Copy output to clipboard
+    all4llm . -x "vendor" -x "tmp"  # Exclude specific directories
 EOF
     exit 0
 }
@@ -95,11 +110,19 @@ list_defaults() {
     exit 0
 }
 
+# Function to list default excluded directories
+list_excluded() {
+    echo "Default excluded directories:"
+    printf '%s\n' "${default_excluded_dirs[@]}" | sort
+    exit 0
+}
+
 # Initialize variables
 recursive=false
 output_file=""
 no_hidden=false
 declare -a include_patterns
+declare -a exclude_dirs=("${default_excluded_dirs[@]}")
 only_pattern=""
 directory=""
 copy_clipboard=false
@@ -133,8 +156,15 @@ while [[ $# -gt 0 ]]; do
         --list-defaults)
             list_defaults
             ;;
+        --list-excluded)
+            list_excluded
+            ;;
         --only)
             only_pattern="$2"
+            shift 2
+            ;;
+        -x|--exclude)
+            exclude_dirs+=("$2")
             shift 2
             ;;
         *)
@@ -156,12 +186,28 @@ if [ ! -d "$directory" ]; then
     exit 1
 fi
 
+# Function to check if path contains excluded directory
+is_excluded() {
+    local path="$1"
+    for excluded in "${exclude_dirs[@]}"; do
+        if [[ "$path" == *"/$excluded/"* || "$path" == *"/$excluded" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Function to check if file should be included
 should_include() {
     local file="$1"
     
     # Skip hidden files if --no-hidden is set
     if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
+        return 1
+    fi
+    
+    # Skip excluded directories
+    if is_excluded "$file"; then
         return 1
     fi
     
