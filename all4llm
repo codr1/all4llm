@@ -18,6 +18,10 @@ default_extensions=(
     "*.md" "*.rst"                        # Documentation
     "*.sql"                               # SQL
     "*.xml" "*.json" "*.yaml" "*.yml"     # Data/Config files
+    "*.lua"                               # Lua
+    "*.toml"                              # TOML
+    "*.conf" "*.config"                   # Config files
+    "*.ini"                               # INI files
 )
 
 # Default excluded directories
@@ -59,7 +63,6 @@ copy_to_clipboard() {
 }
 
 # Function to estimate tokens
-# Using a simple approximation: ~4 characters per token
 estimate_tokens() {
     local char_count=$1
     echo $(( (char_count + 3) / 4 ))
@@ -186,51 +189,40 @@ if [ ! -d "$directory" ]; then
     exit 1
 fi
 
-# Function to check if path contains excluded directory
-is_excluded() {
-    local path="$1"
-    for excluded in "${exclude_dirs[@]}"; do
-        if [[ "$path" == *"/$excluded/"* || "$path" == *"/$excluded" ]]; then
-            return 0
-        fi
+# Build exclude pattern for find command
+build_exclude_pattern() {
+    local pattern=""
+    for dir in "${exclude_dirs[@]}"; do
+        pattern="$pattern -name $dir -prune -o"
     done
-    return 1
+    echo "$pattern"
 }
 
-# Function to check if file should be included
-should_include() {
+# Function to check if file matches any pattern
+matches_any_pattern() {
     local file="$1"
-    
-    # Skip hidden files if --no-hidden is set
-    if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
-        return 1
-    fi
-    
-    # Skip excluded directories
-    if is_excluded "$file"; then
-        return 1
-    fi
+    local basename_file=$(basename "$file")
     
     # If --only is specified, only check that pattern
     if [ -n "$only_pattern" ]; then
-        if [[ "$file" == $only_pattern ]]; then
-            return 0
-        fi
-        return 1
+        case "$basename_file" in
+            $only_pattern) return 0 ;;
+            *) return 1 ;;
+        esac
     fi
     
     # Check against default extensions
-    for ext in "${default_extensions[@]}"; do
-        if [[ "$file" == $ext ]]; then
-            return 0
-        fi
+    for pattern in "${default_extensions[@]}"; do
+        case "$basename_file" in
+            $pattern) return 0 ;;
+        esac
     done
     
     # Check against additional include patterns
     for pattern in "${include_patterns[@]}"; do
-        if [[ "$file" == $pattern ]]; then
-            return 0
-        fi
+        case "$basename_file" in
+            $pattern) return 0 ;;
+        esac
     done
     
     return 1
@@ -240,26 +232,33 @@ should_include() {
 process_files() {
     local dir="$1"
     local temp_file=$(mktemp)
+    local exclude_pattern=$(build_exclude_pattern)
     
-    # Build find command based on recursive flag
     if [ "$recursive" = true ]; then
-        find_cmd="find \"$dir\" -type f"
+        eval "find '$dir' $exclude_pattern -type f -print0" | while IFS= read -r -d $'\0' file; do
+            if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
+                continue
+            fi
+            
+            if matches_any_pattern "$file"; then
+                printf '<<<< FILE: %s >>>>\n' "$file" >> "$temp_file"
+                cat "$file" 2>/dev/null >> "$temp_file" || echo "Error: Unable to read file $file" >> "$temp_file"
+                printf '<<<< END FILE: %s >>>>\n\n' "$file" >> "$temp_file"
+            fi
+        done
     else
-        find_cmd="find \"$dir\" -maxdepth 1 -type f"
+        find "$dir" -maxdepth 1 -type f -print0 | while IFS= read -r -d $'\0' file; do
+            if [ "$no_hidden" = true ] && [[ $(basename "$file") == .* ]]; then
+                continue
+            fi
+            
+            if matches_any_pattern "$file"; then
+                printf '<<<< FILE: %s >>>>\n' "$file" >> "$temp_file"
+                cat "$file" 2>/dev/null >> "$temp_file" || echo "Error: Unable to read file $file" >> "$temp_file"
+                printf '<<<< END FILE: %s >>>>\n\n' "$file" >> "$temp_file"
+            fi
+        done
     fi
-
-    # Process each file
-    while IFS= read -r file; do
-        # Skip if file shouldn't be included
-        if ! should_include "$file"; then
-            continue
-        fi
-        
-        # Output file marker and contents
-        printf '<<<< FILE: %s >>>>\n' "$file" >> "$temp_file"
-        cat "$file" 2>/dev/null >> "$temp_file" || echo "Error: Unable to read file $file" >> "$temp_file"
-        printf '<<<< END FILE: %s >>>>\n\n' "$file" >> "$temp_file"
-    done < <(eval "$find_cmd" | sort)
 
     # Get character count for token estimation
     local char_count=$(wc -c < "$temp_file")
