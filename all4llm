@@ -34,32 +34,33 @@ default_excluded_dirs=(
     "dist"
 )
 
-# Function to check clipboard tool availability
 check_clipboard_tool() {
-    if command -v xclip >/dev/null 2>&1; then
+    if command -v clip.exe >/dev/null 2>&1; then
+        echo "clip.exe"
+    elif command -v xclip >/dev/null 2>&1; then
         echo "xclip"
     elif command -v pbcopy >/dev/null 2>&1; then
         echo "pbcopy"
-    else
-        echo ""
     fi
 }
 
-# Function to copy to clipboard
 copy_to_clipboard() {
     local clipboard_tool=$(check_clipboard_tool)
-    
-    if [ -z "$clipboard_tool" ]; then
-        echo "Error: No clipboard tool found. Please install xclip (Linux) or use macOS."
-        echo "On Ubuntu/Debian: sudo apt-get install xclip"
-        return 1
-    fi
-    
-    if [ "$clipboard_tool" = "xclip" ]; then
-        xclip -selection clipboard
-    else
-        pbcopy
-    fi
+    case "$clipboard_tool" in
+        "clip.exe")
+            clip.exe
+            ;;
+        "xclip")
+            xclip -selection clipboard
+            ;;
+        "pbcopy")
+            pbcopy
+            ;;
+        *)
+            echo "Error: No clipboard tool found."
+            return 1
+            ;;
+    esac
 }
 
 # Function to estimate tokens
@@ -86,7 +87,7 @@ Options:
     -c, --clipboard Copy output to clipboard (requires xclip on Linux)
     --no-hidden     Skip hidden files and directories
     --list-defaults List default file extensions that are included
-    --only PATTERN  Only include specified pattern (disables default extensions)
+    --only PATTERN  Only include specified pattern (can be used multiple times, disables default extensions)
     -x, --exclude DIR
                     Exclude directory (can be used multiple times)
     --list-excluded List default excluded directories
@@ -99,6 +100,7 @@ Examples:
     all4llm -r project/
     all4llm -r . -o project_code.txt --no-hidden
     all4llm . --only "*.py"
+    all4llm . --only "file1.py" --only "file2.js" --only "config.json"
     all4llm . -i "*.conf" -i "*.cfg"
     all4llm . -c     # Copy output to clipboard
     all4llm . -x "vendor" -x "tmp"  # Exclude specific directories
@@ -126,7 +128,7 @@ output_file=""
 no_hidden=false
 declare -a include_patterns
 declare -a exclude_dirs=("${default_excluded_dirs[@]}")
-only_pattern=""
+declare -a only_patterns
 directory=""
 copy_clipboard=false
 
@@ -163,7 +165,7 @@ while [[ $# -gt 0 ]]; do
             list_excluded
             ;;
         --only)
-            only_pattern="$2"
+            only_patterns+=("$2")
             shift 2
             ;;
         -x|--exclude)
@@ -203,12 +205,14 @@ matches_any_pattern() {
     local file="$1"
     local basename_file=$(basename "$file")
     
-    # If --only is specified, only check that pattern
-    if [ -n "$only_pattern" ]; then
-        case "$basename_file" in
-            $only_pattern) return 0 ;;
-            *) return 1 ;;
-        esac
+    # If --only patterns are specified, only check those patterns
+    if [ ${#only_patterns[@]} -gt 0 ]; then
+        for pattern in "${only_patterns[@]}"; do
+            case "$basename_file" in
+                $pattern) return 0 ;;
+            esac
+        done
+        return 1
     fi
     
     # Check against default extensions

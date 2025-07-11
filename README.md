@@ -53,6 +53,9 @@ Basic syntax:
 # Only include Python files
 ./all4llm . --only "*.py"
 
+# Include multiple specific files/patterns
+./all4llm . --only "file1.py" --only "file2.js" --only "config.json"
+
 # Add custom file patterns
 ./all4llm . -i "*.conf" -i "*.cfg"
 ```
@@ -66,7 +69,7 @@ Basic syntax:
 - `-c, --clipboard`: Copy output to clipboard
 - `--no-hidden`: Skip hidden files and directories
 - `--list-defaults`: Show default file extensions
-- `--only PATTERN`: Only include specified pattern (disables defaults)
+- `--only PATTERN`: Only include specified pattern (can be used multiple times, disables defaults)
 
 ### Default File Types
 
